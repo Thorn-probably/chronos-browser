@@ -2,8 +2,8 @@
 Chronos Browser Core Driver & Process Management.
 Prioritizes Google Chrome Stable for standard rendering, hardware GPU acceleration,
 and native codecs.
-Defaults to background mode (--headless=new) so the agent can work without popping
-up windows on the user's active monitor.
+Launches as a non-intrusive background window (--start-minimized, --no-focus-on-map)
+so the user has a real desktop browser window without it popping up in their face.
 """
 
 import os
@@ -23,7 +23,6 @@ CDP_URL = f"http://127.0.0.1:{CDP_PORT}"
 DEFAULT_DISPLAY = os.environ.get("DISPLAY", ":1")
 SOCKET_PATH = Path(os.environ.get("CHRONOS_SOCKET", "/tmp/chronos-browser.sock"))
 
-# Prefer persistent existing profiles
 def get_default_profile() -> str:
     if "CHRONOS_CHROME_PROFILE" in os.environ:
         return os.environ["CHRONOS_CHROME_PROFILE"]
@@ -38,7 +37,6 @@ def get_default_profile() -> str:
 DEFAULT_PROFILE = get_default_profile()
 SCRATCH_DIR = Path.home() / ".chronos-browser" / "scratch"
 
-# Browser Candidates: Google Chrome Stable first
 BROWSER_CANDIDATES = [
     os.environ.get("CHRONOS_CHROME_BIN"),
     os.environ.get("ORDIS_CHROME_BIN"),
@@ -90,7 +88,7 @@ def ensure_browser_process(
     display: Optional[str] = None,
     profile_dir: Optional[str] = None,
     port: int = CDP_PORT,
-    headed: bool = False
+    focus: bool = False
 ) -> bool:
     if is_cdp_ready(port):
         return True
@@ -102,36 +100,35 @@ def ensure_browser_process(
     os.makedirs(prof, exist_ok=True)
     os.makedirs(SCRATCH_DIR, exist_ok=True)
 
-    # Base flags
     cmd = [
         bin_path,
         f"--user-data-dir={prof}",
         f"--remote-debugging-port={port}",
+        "--ozone-platform=x11",
         "--no-first-run",
         "--no-default-browser-check",
         "--window-size=1920,1080",
+        # Performance & background execution unthrottled
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
         "--enable-gpu-rasterization",
         "--enable-zero-copy",
         "--ignore-gpu-blocklist",
         "--enable-features=VaapiVideoDecoder,CanvasOopRasterization",
         "--autoplay-policy=no-user-gesture-required",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
     ]
 
-    env = os.environ.copy()
-
-    if headed:
-        cmd.extend(["--ozone-platform=x11"])
-        env["DISPLAY"] = disp
-    else:
-        # Background mode: real Chrome engine without mapping to physical monitor
+    # Non-intrusive background window flags unless focus is explicitly requested
+    if not focus:
         cmd.extend([
-            "--headless=new",
-            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
-            "--disable-blink-features=AutomationControlled",
+            "--start-minimized",
+            "--no-focus-on-map",
+            "--silent-debugger-extension-api",
         ])
+
+    env = os.environ.copy()
+    env["DISPLAY"] = disp
 
     subprocess.Popen(
         cmd,

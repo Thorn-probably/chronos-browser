@@ -23,7 +23,7 @@ def main():
     p_launch = subparsers.add_parser("launch", aliases=["start"], parents=[common])
     p_launch.add_argument("url", nargs="?", default=None)
     p_launch.add_argument("--display", default=None)
-    p_launch.add_argument("--headed", action="store_true", help="Display window on monitor instead of running in background")
+    p_launch.add_argument("--focus", action="store_true", help="Bring window to front on launch")
 
     # status
     p_status = subparsers.add_parser("status", parents=[common])
@@ -98,6 +98,10 @@ def main():
     # switch-tab
     p_switch = subparsers.add_parser("switch-tab", aliases=["tab"], parents=[common])
     p_switch.add_argument("index", type=int)
+    p_switch.add_argument("--focus", action="store_true")
+
+    # focus
+    p_focus = subparsers.add_parser("focus", parents=[common])
 
     # close-tab
     p_closetab = subparsers.add_parser("close-tab", parents=[common])
@@ -129,7 +133,7 @@ def main():
     payload = {"tab_index": args.tab}
 
     if cmd in ["launch", "start"]:
-        payload.update({"action": "launch", "url": args.url, "display": args.display, "headed": args.headed})
+        payload.update({"action": "launch", "url": args.url, "display": args.display, "focus": args.focus})
     elif cmd == "status":
         payload.update({"action": "status"})
     elif cmd in ["goto", "open"]:
@@ -166,7 +170,9 @@ def main():
     elif cmd == "new-tab":
         payload.update({"action": "new_tab", "url": args.url})
     elif cmd in ["switch-tab", "tab"]:
-        payload.update({"action": "switch_tab", "index": args.index})
+        payload.update({"action": "switch_tab", "index": args.index, "focus": args.focus})
+    elif cmd == "focus":
+        payload.update({"action": "focus"})
     elif cmd == "close-tab":
         payload.update({"action": "close_tab", "index": args.index})
     elif cmd == "batch":

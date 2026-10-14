@@ -2,7 +2,7 @@
 Chronos Resident Daemon - Keeps Playwright and Google Chrome connection in memory
 over a fast local UNIX domain socket (/tmp/chronos-browser.sock).
 Execution latency per action: < 15ms.
-Supports background mode (--headless=new) by default so the agent can work quietly.
+Maintains a real headed browser window in the background without stealing focus.
 """
 
 import os
@@ -37,11 +37,9 @@ class ChronosDaemon:
         self.context: Optional[BrowserContext] = None
         self.running = False
         self._server = None
-        self.headed = False
 
-    async def init_browser(self, headed: bool = False):
-        self.headed = headed
-        if not ensure_browser_process(headed=headed):
+    async def init_browser(self, focus: bool = False):
+        if not ensure_browser_process(focus=focus):
             raise RuntimeError(f"Could not start Google Chrome binary at {find_browser_binary()}")
 
         if self.playwright is None:
@@ -55,7 +53,7 @@ class ChronosDaemon:
 
     async def get_page(self, tab_index: Optional[int] = None) -> Page:
         if not self.browser or not self.browser.is_connected() or not self.context:
-            await self.init_browser(headed=self.headed)
+            await self.init_browser()
 
         pages = self.context.pages
         if not pages:
@@ -74,7 +72,6 @@ class ChronosDaemon:
         if target.startswith("//") or target.startswith("(//"):
             return page.locator(f"xpath={target}").first
 
-        # Direct CSS locator
         try:
             loc = page.locator(target)
             if await loc.count() > 0:
@@ -82,7 +79,6 @@ class ChronosDaemon:
         except Exception:
             pass
 
-        # Attributes (aria-label, placeholder, title, name)
         for attr in ["aria-label", "placeholder", "title", "name"]:
             try:
                 loc = page.locator(f"[{attr}*='{target}']")
@@ -91,7 +87,6 @@ class ChronosDaemon:
             except Exception:
                 pass
 
-        # Fallback to visible text
         return page.get_by_text(target, exact=False).first
 
     async def handle_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,7 +110,7 @@ class ChronosDaemon:
                             tabs.append({"index": i, "title": "[unavailable]", "url": ""})
                 return {
                     "running": True,
-                    "mode": "headed" if self.headed else "background",
+                    "window": "background (non-intrusive)",
                     "browser_bin": find_browser_binary(),
                     "display": DEFAULT_DISPLAY,
                     "cdp_port": CDP_PORT,
@@ -125,19 +120,16 @@ class ChronosDaemon:
 
             elif action in ["launch", "start"]:
                 display = payload.get("display") or DEFAULT_DISPLAY
-                headed = payload.get("headed", False)
-                # If mode changed and browser already running, restart with requested mode
-                if self.browser and self.headed != headed:
-                    await self.stop_browser()
-                ensure_browser_process(display=display, headed=headed)
-                await self.init_browser(headed=headed)
+                focus = payload.get("focus", False)
+                ensure_browser_process(display=display, focus=focus)
+                await self.init_browser(focus=focus)
                 url = payload.get("url")
                 if url:
                     page = await self.get_page(tab_idx)
                     u = url if (url.startswith("http://") or url.startswith("https://")) else f"https://{url}"
                     await page.goto(u, timeout=45000, wait_until="domcontentloaded")
-                    return {"status": "launched", "mode": "headed" if headed else "background", "title": await page.title(), "url": page.url}
-                return {"status": "launched", "mode": "headed" if headed else "background", "browser_bin": find_browser_binary()}
+                    return {"status": "launched", "title": await page.title(), "url": page.url}
+                return {"status": "launched", "browser_bin": find_browser_binary()}
 
             elif action in ["goto", "navigate", "open"]:
                 page = await self.get_page(tab_idx)
@@ -278,7 +270,7 @@ class ChronosDaemon:
                 return {"status": "ok", "tabs": tabs}
 
             elif action == "new_tab":
-                await self.init_browser(headed=self.headed)
+                await self.init_browser()
                 page = await self.context.new_page()
                 url = payload.get("url")
                 if url:
@@ -288,7 +280,14 @@ class ChronosDaemon:
 
             elif action == "switch_tab":
                 page = await self.get_page(payload["index"])
-                return {"status": "focused", "index": payload["index"], "title": await page.title(), "url": page.url}
+                if payload.get("focus"):
+                    await page.bring_to_front()
+                return {"status": "switched", "index": payload["index"], "title": await page.title(), "url": page.url}
+
+            elif action == "focus":
+                page = await self.get_page(tab_idx)
+                await page.bring_to_front()
+                return {"status": "focused", "title": await page.title()}
 
             elif action == "close_tab":
                 idx = payload.get("index", 0)
@@ -383,7 +382,7 @@ class ChronosDaemon:
             SOCKET_PATH.unlink()
 
         SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
-        await self.init_browser(headed=False)
+        await self.init_browser(focus=False)
 
         self._server = await asyncio.start_unix_server(self.client_connected, path=str(SOCKET_PATH))
         self.running = True

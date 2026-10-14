@@ -15,11 +15,16 @@ app = MCPServer(
 @app.tool()
 async def browser_launch(
     url: Optional[str] = None,
-    headed: bool = False,
+    focus: bool = False,
     display: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Launch or verify Chrome browser (defaults to background mode). Set headed=True to show UI on monitor."""
-    return client.send({"action": "launch", "url": url, "display": display, "headed": headed})
+    """Launch or verify Chrome browser in the background. Set focus=True only if you explicitly want to bring it to the foreground."""
+    return client.send({"action": "launch", "url": url, "display": display, "focus": focus})
+
+@app.tool()
+async def browser_focus(tab_index: Optional[int] = None) -> Dict[str, Any]:
+    """Explicitly bring the browser window to the foreground."""
+    return client.send({"action": "focus", "tab_index": tab_index})
 
 @app.tool()
 async def browser_status() -> Dict[str, Any]:
