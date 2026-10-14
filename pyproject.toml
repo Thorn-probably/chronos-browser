@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chronos-browser"
+version = "0.1.0"
+description = "High-Speed Headed Chromium Driver & MCP Server for AI Agents"
+readme = "README.md"
+authors = [
+    { name = "Pranshoo Mittal", email = "thorn.dev49@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "playwright>=1.40.0",
+]
+
+[project.scripts]
+chronos-browser = "chronos_browser.cli:main"
+chronos-browser-mcp = "chronos_browser.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["chronos_browser*"]
