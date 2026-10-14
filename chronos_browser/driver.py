@@ -2,6 +2,8 @@
 Chronos Browser Core Driver & Process Management.
 Prioritizes Google Chrome Stable for standard rendering, hardware GPU acceleration,
 and native codecs.
+Defaults to background mode (--headless=new) so the agent can work without popping
+up windows on the user's active monitor.
 """
 
 import os
@@ -25,9 +27,11 @@ SOCKET_PATH = Path(os.environ.get("CHRONOS_SOCKET", "/tmp/chronos-browser.sock")
 def get_default_profile() -> str:
     if "CHRONOS_CHROME_PROFILE" in os.environ:
         return os.environ["CHRONOS_CHROME_PROFILE"]
-    ordis_prof = Path.home() / ".config" / "ordis-chrome-profile"
     chronos_prof = Path.home() / ".config" / "chronos-chrome-profile"
-    if ordis_prof.exists() and not chronos_prof.exists():
+    ordis_prof = Path.home() / ".config" / "ordis-chrome-profile"
+    if chronos_prof.exists():
+        return str(chronos_prof)
+    if ordis_prof.exists():
         return str(ordis_prof)
     return str(chronos_prof)
 
@@ -51,7 +55,6 @@ def find_browser_binary() -> str:
     for candidate in BROWSER_CANDIDATES:
         if candidate and os.path.exists(candidate) and os.access(candidate, os.X_OK):
             return candidate
-    # Fallback to playwright cache if system chrome is absent
     pw_cache = Path.home() / ".cache" / "ms-playwright"
     if pw_cache.exists():
         for p in pw_cache.glob("chromium-*/chrome-linux64/chrome"):
@@ -86,7 +89,8 @@ def prune_scratch_dir(max_files: int = 30):
 def ensure_browser_process(
     display: Optional[str] = None,
     profile_dir: Optional[str] = None,
-    port: int = CDP_PORT
+    port: int = CDP_PORT,
+    headed: bool = False
 ) -> bool:
     if is_cdp_ready(port):
         return True
@@ -98,14 +102,14 @@ def ensure_browser_process(
     os.makedirs(prof, exist_ok=True)
     os.makedirs(SCRATCH_DIR, exist_ok=True)
 
+    # Base flags
     cmd = [
         bin_path,
         f"--user-data-dir={prof}",
         f"--remote-debugging-port={port}",
-        "--ozone-platform=x11",
         "--no-first-run",
         "--no-default-browser-check",
-        # Performance & GPU hardware acceleration
+        "--window-size=1920,1080",
         "--enable-gpu-rasterization",
         "--enable-zero-copy",
         "--ignore-gpu-blocklist",
@@ -117,7 +121,17 @@ def ensure_browser_process(
     ]
 
     env = os.environ.copy()
-    env["DISPLAY"] = disp
+
+    if headed:
+        cmd.extend(["--ozone-platform=x11"])
+        env["DISPLAY"] = disp
+    else:
+        # Background mode: real Chrome engine without mapping to physical monitor
+        cmd.extend([
+            "--headless=new",
+            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "--disable-blink-features=AutomationControlled",
+        ])
 
     subprocess.Popen(
         cmd,
@@ -127,9 +141,9 @@ def ensure_browser_process(
         start_new_session=True
     )
 
-    for _ in range(30):
+    for _ in range(35):
         if is_cdp_ready(port):
             return True
-        time.sleep(0.15)
+        time.sleep(0.12)
 
     return False

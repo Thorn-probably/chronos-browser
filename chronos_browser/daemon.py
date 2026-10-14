@@ -2,6 +2,7 @@
 Chronos Resident Daemon - Keeps Playwright and Google Chrome connection in memory
 over a fast local UNIX domain socket (/tmp/chronos-browser.sock).
 Execution latency per action: < 15ms.
+Supports background mode (--headless=new) by default so the agent can work quietly.
 """
 
 import os
@@ -36,9 +37,11 @@ class ChronosDaemon:
         self.context: Optional[BrowserContext] = None
         self.running = False
         self._server = None
+        self.headed = False
 
-    async def init_browser(self):
-        if not ensure_browser_process():
+    async def init_browser(self, headed: bool = False):
+        self.headed = headed
+        if not ensure_browser_process(headed=headed):
             raise RuntimeError(f"Could not start Google Chrome binary at {find_browser_binary()}")
 
         if self.playwright is None:
@@ -52,7 +55,7 @@ class ChronosDaemon:
 
     async def get_page(self, tab_index: Optional[int] = None) -> Page:
         if not self.browser or not self.browser.is_connected() or not self.context:
-            await self.init_browser()
+            await self.init_browser(headed=self.headed)
 
         pages = self.context.pages
         if not pages:
@@ -60,14 +63,10 @@ class ChronosDaemon:
 
         if tab_index is not None:
             if 0 <= tab_index < len(pages):
-                p = pages[tab_index]
-                await p.bring_to_front()
-                return p
+                return pages[tab_index]
             raise IndexError(f"Tab index {tab_index} out of range (0-{len(pages)-1})")
 
-        p = pages[0]
-        await p.bring_to_front()
-        return p
+        return pages[0]
 
     async def resolve_locator(self, page: Page, target: str) -> Locator:
         if any(target.startswith(p) for p in ["text=", "css=", "xpath=", "role=", "id="]):
@@ -116,6 +115,7 @@ class ChronosDaemon:
                             tabs.append({"index": i, "title": "[unavailable]", "url": ""})
                 return {
                     "running": True,
+                    "mode": "headed" if self.headed else "background",
                     "browser_bin": find_browser_binary(),
                     "display": DEFAULT_DISPLAY,
                     "cdp_port": CDP_PORT,
@@ -125,15 +125,19 @@ class ChronosDaemon:
 
             elif action in ["launch", "start"]:
                 display = payload.get("display") or DEFAULT_DISPLAY
-                ensure_browser_process(display=display)
-                await self.init_browser()
+                headed = payload.get("headed", False)
+                # If mode changed and browser already running, restart with requested mode
+                if self.browser and self.headed != headed:
+                    await self.stop_browser()
+                ensure_browser_process(display=display, headed=headed)
+                await self.init_browser(headed=headed)
                 url = payload.get("url")
                 if url:
                     page = await self.get_page(tab_idx)
                     u = url if (url.startswith("http://") or url.startswith("https://")) else f"https://{url}"
                     await page.goto(u, timeout=45000, wait_until="domcontentloaded")
-                    return {"status": "launched", "title": await page.title(), "url": page.url}
-                return {"status": "launched", "browser_bin": find_browser_binary()}
+                    return {"status": "launched", "mode": "headed" if headed else "background", "title": await page.title(), "url": page.url}
+                return {"status": "launched", "mode": "headed" if headed else "background", "browser_bin": find_browser_binary()}
 
             elif action in ["goto", "navigate", "open"]:
                 page = await self.get_page(tab_idx)
@@ -141,7 +145,6 @@ class ChronosDaemon:
                 if not (u.startswith("http://") or u.startswith("https://") or u.startswith("chrome://") or u.startswith("file://")):
                     u = "https://" + u
                 await page.goto(u, timeout=45000, wait_until="domcontentloaded")
-                await page.bring_to_front()
                 return {"status": "navigated", "title": await page.title(), "url": page.url}
 
             elif action == "click":
@@ -275,13 +278,12 @@ class ChronosDaemon:
                 return {"status": "ok", "tabs": tabs}
 
             elif action == "new_tab":
-                await self.init_browser()
+                await self.init_browser(headed=self.headed)
                 page = await self.context.new_page()
                 url = payload.get("url")
                 if url:
                     u = url if url.startswith("http") else f"https://{url}"
                     await page.goto(u, timeout=45000, wait_until="domcontentloaded")
-                await page.bring_to_front()
                 return {"status": "opened", "index": len(self.context.pages)-1, "title": await page.title(), "url": page.url}
 
             elif action == "switch_tab":
@@ -323,7 +325,6 @@ class ChronosDaemon:
                 code = payload.get("code", "").strip()
                 page = await self.get_page(tab_idx)
                 
-                # Check if it's a single expression
                 lines = code.splitlines()
                 if len(lines) == 1 and not any(code.startswith(k) for k in ["import ", "from ", "def ", "class ", "return "]):
                     body = f"    return {code}"
@@ -337,16 +338,7 @@ class ChronosDaemon:
                 return {"status": "ok", "return_value": ret_val}
 
             elif action in ["stop", "kill"]:
-                if self.browser:
-                    try:
-                        await self.browser.close()
-                    except Exception:
-                        pass
-                if self.playwright:
-                    try:
-                        await self.playwright.stop()
-                    except Exception:
-                        pass
+                await self.stop_browser()
                 self.running = False
                 return {"status": "stopped"}
 
@@ -355,6 +347,20 @@ class ChronosDaemon:
 
         except Exception as e:
             return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+
+    async def stop_browser(self):
+        if self.browser:
+            try:
+                await self.browser.close()
+            except Exception:
+                pass
+            self.browser = None
+        if self.playwright:
+            try:
+                await self.playwright.stop()
+            except Exception:
+                pass
+            self.playwright = None
 
     async def client_connected(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
@@ -377,12 +383,11 @@ class ChronosDaemon:
             SOCKET_PATH.unlink()
 
         SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
-        await self.init_browser()
+        await self.init_browser(headed=False)
 
         self._server = await asyncio.start_unix_server(self.client_connected, path=str(SOCKET_PATH))
         self.running = True
 
-        # Signal handlers
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
@@ -397,10 +402,7 @@ class ChronosDaemon:
             await self._server.wait_closed()
         if SOCKET_PATH.exists():
             SOCKET_PATH.unlink()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        await self.stop_browser()
         sys.exit(0)
 
 def main():

@@ -23,6 +23,7 @@ def main():
     p_launch = subparsers.add_parser("launch", aliases=["start"], parents=[common])
     p_launch.add_argument("url", nargs="?", default=None)
     p_launch.add_argument("--display", default=None)
+    p_launch.add_argument("--headed", action="store_true", help="Display window on monitor instead of running in background")
 
     # status
     p_status = subparsers.add_parser("status", parents=[common])
@@ -128,7 +129,7 @@ def main():
     payload = {"tab_index": args.tab}
 
     if cmd in ["launch", "start"]:
-        payload.update({"action": "launch", "url": args.url, "display": args.display})
+        payload.update({"action": "launch", "url": args.url, "display": args.display, "headed": args.headed})
     elif cmd == "status":
         payload.update({"action": "status"})
     elif cmd in ["goto", "open"]:

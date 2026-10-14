@@ -13,9 +13,13 @@ app = MCPServer(
 )
 
 @app.tool()
-async def browser_launch(url: Optional[str] = None, display: Optional[str] = None) -> Dict[str, Any]:
-    """Launch or verify headed Chromium browser on DISPLAY and optionally navigate to a URL."""
-    return client.send({"action": "launch", "url": url, "display": display})
+async def browser_launch(
+    url: Optional[str] = None,
+    headed: bool = False,
+    display: Optional[str] = None
+) -> Dict[str, Any]:
+    """Launch or verify Chrome browser (defaults to background mode). Set headed=True to show UI on monitor."""
+    return client.send({"action": "launch", "url": url, "display": display, "headed": headed})
 
 @app.tool()
 async def browser_status() -> Dict[str, Any]:
