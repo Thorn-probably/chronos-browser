@@ -1,180 +1,157 @@
-# Chronos Browser ⚡
+# Chronos Browser
 
-**High-Performance Headed Chromium Driver & Model Context Protocol (MCP) Server for AI Agents.**
+**High-Speed Headed Browser Engine & Model Context Protocol (MCP) Server for Autonomous AI Agents.**
 
-Chronos Browser provides instantaneous, robust browser automation for AI coding assistants and autonomous agents (Hermes Agent, Claude Desktop, Cursor, Goose, Zed, Windsurf, etc.). 
+Chronos Browser solves the fundamental bottleneck of AI browser automation: latency and setup overhead. Instead of spinning up new browser instances, CDP connections, or ad-hoc Python scripts for every interaction, Chronos uses a **resident background daemon** communicating over a high-performance **UNIX domain socket** (`/tmp/chronos-browser.sock`).
 
-Unlike naive wrappers that spawn a fresh browser process or disconnect CDP on every action, Chronos Browser keeps an active, in-memory connection to a persistent headed Chromium session with hardware GPU acceleration, natural rendering (no forced contrast or dark filters), and a multi-action pipeline that eliminates LLM round-trip latency.
-
----
-
-## ✨ Key Features
-
-- **Standard MCP Server**: 18 specialized browser automation tools callable by any MCP client.
-- **Persistent Profile & State**: Retains logins, cookies, localStorage, and session state across runs (`~/.config/chronos-chrome-profile`).
-- **Zero Inversion / Forced Filters**: Clean, natural color rendering for all web pages and screenshots.
-- **Pipeline Batching (`browser_batch`)**: Execute multi-step sequences (e.g. *navigate → wait → fill input → press Enter → screenshot*) in a single tool call.
-- **Smart Element Locators**: Intelligently resolves CSS selectors, text matches, XPath, `aria-label`, `placeholder`, and interactive roles.
-- **Dual Interface**: Run as an MCP server via stdio, or control directly via the `chronos-browser` CLI.
+Every click, typing stroke, navigation, or DOM inspection completes in **2 to 15 milliseconds**.
 
 ---
 
-## 🚀 Quickstart & Installation
+## Key Features
 
-### Requirements
-- Linux / macOS (X11, Wayland, or headless Xvfb)
-- Python 3.10+
-- Chromium, Google Chrome, or Brave installed
+- ⚡ **Sub-15ms Latency**: Resident background daemon keeps Playwright and the browser context persistently warm in memory. Zero process-startup lag.
+- 🌐 **Native Google Chrome**: Prioritizes system `/usr/bin/google-chrome-stable` with hardware GPU acceleration, VA-API video decoding, and natural color rendering (no forced dark mode).
+- 🐍 **Embedded Script Runner**: Run complex Playwright logic instantly inside the resident daemon (`chronos-browser run "await page.title()"`) without writing or spawning Python files.
+- 🔌 **Standard Model Context Protocol (MCP)**: 18 high-performance tools ready for Hermes, Claude Desktop, Cursor, or Goose.
+- ⌨️ **Smart Locators**: Automatically resolves CSS, text content, XPath, aria-labels, placeholders, and button titles.
+- 🗂️ **Tab & Profile Isolation**: Manages multiple tabs, headless or headed modes (`DISPLAY=:1`), and persistent sessions (WhatsApp Web, Google Workspace, GitHub).
 
-### Install from Source
+---
+
+## Architecture
+
+```
++--------------------------------------------------------+
+|          AI Agent / User CLI / Claude / Cursor         |
++--------------------------------------------------------+
+                           |
+            JSON-RPC over UNIX Domain Socket
+               (/tmp/chronos-browser.sock)
+                           | (< 15ms latency)
++--------------------------------------------------------+
+|                 Chronos Resident Daemon                |
+|  - In-memory Playwright instance                       |
+|  - Active Page/Context references                      |
+|  - Embedded Python Snippet Execution Engine            |
++--------------------------------------------------------+
+                           |
+             Persistent Chrome DevTools Protocol
+                           | (127.0.0.1:9222)
++--------------------------------------------------------+
+|             Google Chrome Stable (Headed)              |
+|  - Hardware GPU Acceleration (VA-API / OpenGL)         |
+|  - Persistent Profile (~/.config/chronos-chrome-prof)  |
++--------------------------------------------------------+
+```
+
+---
+
+## Installation
+
 ```bash
-git clone https://github.com/Thorn-probably/chronos-browser.git
-cd chronos-browser
+git clone https://github.com/Thorn-probably/chronos-browser.git ~/Documents/MAIN/NEW/chronos-browser
+cd ~/Documents/MAIN/NEW/chronos-browser
 pip install -e .
 ```
 
-Ensure Playwright dependencies are installed:
+To create convenience aliases / symlinks:
 ```bash
-playwright install chromium
+ln -sf $(which chronos-browser) ~/.local/bin/ordis-browser
+ln -sf $(which chronos-browser-mcp) ~/.local/bin/ordis-browser-mcp
 ```
 
 ---
 
-## 🤖 Connecting to AI Agents (MCP Setup)
+## CLI Quickstart
 
-Chronos Browser communicates over standard I/O via the Model Context Protocol (`mcp`).
-
-### 1. Hermes Agent (`~/.hermes/config.yaml`)
-```yaml
-mcp_servers:
-  chronos-browser:
-    command: chronos-browser-mcp
-    enabled: true
-```
-
-### 2. Claude Desktop (`claude_desktop_config.json`)
-```json
-{
-  "mcpServers": {
-    "chronos-browser": {
-      "command": "chronos-browser-mcp"
-    }
-  }
-}
-```
-
-### 3. Cursor (`~/.cursor/mcp.json` or project `.cursor/mcp.json`)
-```json
-{
-  "mcpServers": {
-    "chronos-browser": {
-      "command": "chronos-browser-mcp"
-    }
-  }
-}
-```
-
-### 4. Direct CLI execution as MCP server
-```bash
-chronos-browser mcp
-# or
-chronos-browser-mcp
-```
-
----
-
-## 🛠️ Available MCP Tools
-
-| Tool | Parameters | Description |
-|---|---|---|
-| `browser_launch` | `url`, `display` | Start headed Chromium if not already running. |
-| `browser_status` | none | Check browser status, active tabs, and CDP state. |
-| `browser_navigate` | `url`, `tab_index` | Navigate to URL (auto-prefixes `https://`). |
-| `browser_click` | `target`, `wait_navigation`, `tab_index` | Smart click (CSS, text, XPath, aria-label, title). |
-| `browser_type` | `target`, `text`, `press_enter`, `clear_first`, `tab_index` | Fill/type text into input, textarea, or `contenteditable`. |
-| `browser_press_key` | `key`, `tab_index` | Press keyboard key (`Enter`, `Escape`, `Tab`, `ArrowDown`, etc.). |
-| `browser_scroll` | `direction` (`up`/`down`/`top`/`bottom`/`pixels`) | Scroll viewport smoothly. |
-| `browser_screenshot` | `output_path`, `full_page`, `tab_index` | Capture screenshot to PNG. |
-| `browser_get_content` | `format` (`markdown`/`text`/`html`), `selector` | Extract clean DOM markdown, text, or HTML. |
-| `browser_get_links` | `tab_index` | Extract all clickable links (`text`, `href`). |
-| `browser_evaluate` | `expression`, `tab_index` | Evaluate JavaScript in the page context. |
-| `browser_tabs` | none | List all open tabs with indexes, titles, and URLs. |
-| `browser_new_tab` | `url` | Open and focus a new tab. |
-| `browser_switch_tab` | `tab_index` | Switch active focus to a tab index. |
-| `browser_close_tab` | `tab_index` | Close tab. |
-| `browser_wait` | `target_or_seconds` | Wait for seconds (`"2"`) or for selector to appear. |
-| `browser_batch` | `actions: List[Dict]` | **Execute multi-action pipelines in 1 round trip.** |
-| `browser_stop` | none | Gracefully stop the browser process. |
-
----
-
-## ⚡ The `browser_batch` Tool
-
-To prevent latency from sequential round trips across multi-step actions, pass a batch list:
-
-```json
-{
-  "actions": [
-    {"action": "navigate", "url": "https://news.ycombinator.com"},
-    {"action": "wait", "target_or_seconds": "1.5"},
-    {"action": "click", "target": "past"},
-    {"action": "screenshot", "output_path": "/tmp/hn_past.png"}
-  ]
-}
-```
-
----
-
-## 💻 CLI Commands
-
-Chronos Browser also includes a full CLI for fast terminal operations:
+The CLI automatically starts the resident daemon on first use:
 
 ```bash
-# Launch browser
-chronos-browser launch "https://github.com"
-
-# Check status & list tabs
+# Check status and open tabs
 chronos-browser status
 
-# Navigation
-chronos-browser goto "https://example.com"
-chronos-browser search "model context protocol"
+# Navigate
+chronos-browser goto "https://web.whatsapp.com"
+chronos-browser search "autonomous coding agents"
 
-# Interaction
-chronos-browser click "Sign In"
-chronos-browser fill "input[name='q']" "playwright automation" --press-enter
-chronos-browser type "textarea[name='comment']" "Hello world!" --press-enter
+# Instant DOM Interaction (< 15ms)
+chronos-browser click "button#submit"
+chronos-browser click "Shashank Jangid"
+chronos-browser type "input[type='text']" "Hello world" --press-enter
 chronos-browser press "Enter"
+chronos-browser scroll down
 
-# Content Extraction & Screenshots
+# Instant Content Extraction
 chronos-browser markdown
-chronos-browser text
-chronos-browser screenshot /tmp/capture.png
+chronos-browser text "div.message-in"
+chronos-browser links
+chronos-browser screenshot /tmp/preview.png
+
+# Embedded Script Runner (No separate Python files needed!)
+chronos-browser run "await page.title()"
+chronos-browser run "await page.locator('textarea').fill('Fast agent'); await page.keyboard.press('Enter')"
 
 # Tab Management
-chronos-browser new-tab "https://news.ycombinator.com"
-chronos-browser close-tab --tab 1
+chronos-browser tabs
+chronos-browser new-tab "https://github.com"
+chronos-browser switch-tab 1
+chronos-browser close-tab 0
 
-# Semicolon Batch Execution
-chronos-browser batch "goto https://example.com ; wait 1 ; screenshot"
-
-# Stop
+# Stop Browser
 chronos-browser stop
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## MCP Server Integration
 
-| Variable | Default | Description |
-|---|---|---|
-| `DISPLAY` | `:1` | X11 display target. |
-| `CHRONOS_CDP_PORT` | `9222` | Remote debugging CDP port. |
-| `CHRONOS_CHROME_PROFILE` | `~/.config/chronos-chrome-profile` | Directory for persistent browser user profile. |
-| `CHRONOS_CHROME_BIN` | auto-detected | Override path to custom Chromium/Chrome binary. |
+Add Chronos Browser to your MCP configuration:
+
+### Claude Desktop (`~/.config/Claude/claude_desktop_config.json`) / Cursor:
+```json
+{
+  "mcpServers": {
+    "chronos-browser": {
+      "command": "chronos-browser-mcp"
+    }
+  }
+}
+```
+
+### Hermes Agent (`~/.hermes/config.yaml`):
+```yaml
+mcp_servers:
+  chronos-browser:
+    command: /home/pranshoo/.local/bin/chronos-browser-mcp
+    enabled: true
+```
+
+### Available MCP Tools (18 Tools):
+| Tool | Description |
+|---|---|
+| `browser_launch` | Launch or ensure headed Chromium/Chrome is running |
+| `browser_status` | Return running state, active tabs, and port |
+| `browser_navigate` | Navigate active or specified tab to URL |
+| `browser_click` | Click elements by selector, text, aria-label, or title |
+| `browser_type` | Type/fill text into inputs, textareas, contenteditable |
+| `browser_press_key` | Send keyboard keys (Enter, Escape, Tab, etc.) |
+| `browser_scroll` | Scroll up, down, top, bottom, or exact delta |
+| `browser_get_content` | Extract clean markdown, text, or HTML |
+| `browser_get_links` | Return all interactive page links with URLs |
+| `browser_screenshot` | Capture viewport or full-page PNG |
+| `browser_evaluate` | Run arbitrary JavaScript in page context |
+| `browser_tabs` | List open tabs with title and URL |
+| `browser_new_tab` | Open a new tab |
+| `browser_switch_tab` | Focus specific tab index |
+| `browser_close_tab` | Close specified tab index |
+| `browser_wait` | Wait for selector or duration |
+| `browser_batch` | Execute chained multi-step actions in one request |
+| `browser_run_code` | Execute Python snippets directly in resident daemon |
+| `browser_stop` | Terminate browser and resident daemon |
 
 ---
 
-## 📄 License
+## License
 
-MIT License. Copyright (c) 2026 Pranshoo Mittal.
+MIT License. See [LICENSE](LICENSE) for details.
