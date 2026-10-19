@@ -10,12 +10,12 @@ Every click, typing stroke, navigation, or DOM inspection completes in **2 to 15
 
 ## Key Features
 
-- ⚡ **Sub-15ms Latency**: Resident background daemon keeps Playwright and the browser context persistently warm in memory. Zero process-startup lag.
-- 🌐 **Native Google Chrome**: Prioritizes system `/usr/bin/google-chrome-stable` with hardware GPU acceleration, VA-API video decoding, and natural color rendering (no forced dark mode).
-- 🐍 **Embedded Script Runner**: Run complex Playwright logic instantly inside the resident daemon (`chronos-browser run "await page.title()"`) without writing or spawning Python files.
-- 🔌 **Standard Model Context Protocol (MCP)**: 18 high-performance tools ready for Hermes, Claude Desktop, Cursor, or Goose.
-- ⌨️ **Smart Locators**: Automatically resolves CSS, text content, XPath, aria-labels, placeholders, and button titles.
-- 🗂️ **Tab & Profile Isolation**: Manages multiple tabs, headless or headed modes (`DISPLAY=:1`), and persistent sessions (WhatsApp Web, Google Workspace, GitHub).
+- **Sub-15ms Latency**: Resident background daemon keeps Playwright and the browser context persistently warm in memory. Zero process-startup lag.
+- **Native Google Chrome**: Prioritizes system `/usr/bin/google-chrome-stable` with hardware GPU acceleration, VA-API video decoding, and natural color rendering (no forced dark mode).
+- **Embedded Script Runner**: Run complex Playwright logic instantly inside the resident daemon (`chronos-browser run "await page.title()"`) without writing or spawning Python files.
+- **Standard Model Context Protocol (MCP)**: 18 high-performance tools ready for Hermes, Claude Desktop, Cursor, or Goose.
+- **Smart Locators**: Automatically resolves CSS, text content, XPath, aria-labels, placeholders, and button titles.
+- **Tab & Profile Isolation**: Manages multiple tabs, headless or headed modes (`DISPLAY=:1`), and persistent sessions (WhatsApp Web, Google Workspace, GitHub).
 
 ---
 
