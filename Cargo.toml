@@ -1,0 +1,25 @@
+[package]
+name = "chronos-browser"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chronos Browser Contributors"]
+description = "Ultra-fast, memory-efficient AI-first browser and MCP server in pure Rust"
+
+[dependencies]
+tokio = { version = "1.38", features = ["full"] }
+tokio-tungstenite = { version = "0.23", features = ["connect"] }
+futures-util = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "5.0"
+anyhow = "1.0"
+thiserror = "1.0"
+which = "6.0"
+base64 = "0.22"
+regex = "1.10"
+tempfile = "3.10"
+
+[dev-dependencies]
